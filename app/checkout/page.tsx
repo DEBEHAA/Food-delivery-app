@@ -1,12 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChevronLeft, CreditCard, MapPin, Truck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -14,7 +21,13 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 
-// Sample cart data
+// Declare Razorpay type globally
+declare global {
+  interface Window {
+    Razorpay: any
+  }
+}
+
 const cartItems = [
   {
     id: 1,
@@ -42,7 +55,6 @@ const cartItems = [
   },
 ]
 
-// Sample addresses
 const savedAddresses = [
   {
     id: 1,
@@ -57,7 +69,7 @@ const savedAddresses = [
     id: 2,
     name: "Office",
     address: "456 Business Park, Building C",
-    city: "erode",
+    city: "Erode",
     state: "Tamilnadu",
     pincode: "673902",
     phone: "9876543210",
@@ -68,25 +80,69 @@ export default function CheckoutPage() {
   const [selectedAddress, setSelectedAddress] = useState(savedAddresses[0].id)
   const [paymentMethod, setPaymentMethod] = useState("card")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [prefilledName, setPrefilledName] = useState("Customer")
   const router = useRouter()
   const { toast } = useToast()
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const name = localStorage.getItem("name") || "Customer"
+      setPrefilledName(name)
+
+      const script = document.createElement("script")
+      script.src = "https://checkout.razorpay.com/v1/checkout.js"
+      script.async = true
+      script.onload = () => console.log("Razorpay SDK loaded")
+      script.onerror = () => console.error("Failed to load Razorpay SDK")
+      document.body.appendChild(script)
+
+      return () => {
+        document.body.removeChild(script)
+      }
+    }
+  }, [])
 
   const subtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
   const deliveryFee = 40
   const total = subtotal + deliveryFee
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
+    if (typeof window === "undefined" || !window.Razorpay) {
+      alert("Razorpay SDK not loaded")
+      return
+    }
+
     setIsProcessing(true)
 
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsProcessing(false)
-      toast({
-        title: "Payment Successful",
-        description: "Your order has been placed successfully!",
-      })
-      router.push("/order-confirmation")
-    }, 2000)
+    const options = {
+      key: "rzp_test_4rdgre6savrrmw",
+      amount: total * 100,
+      currency: "INR",
+      name: "God of Burger",
+      description: "Order Payment",
+      handler: async function (response: any) {
+        toast({
+          title: "Payment Successful",
+          description: `Payment ID: ${response.razorpay_payment_id}`,
+        })
+        router.push("/order-confirmation")
+      },
+      prefill: {
+        name: prefilledName,
+        email: "customer@example.com",
+        contact: "9876543210",
+      },
+      notes: {
+        address: "Customer address",
+      },
+      theme: {
+        color: "#EF4444",
+      },
+    }
+
+    const pay = new window.Razorpay(options)
+    pay.open()
+    setIsProcessing(false)
   }
 
   return (
@@ -102,149 +158,80 @@ export default function CheckoutPage() {
 
       <div className="grid gap-8 md:grid-cols-3">
         <div className="md:col-span-2 space-y-8">
-          {/* Delivery Address */}
           <Card>
-            <CardHeader className="flex flex-row items-center">
-              <div className="mr-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
-                <MapPin className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Delivery Address</CardTitle>
-                <CardDescription>Select where you want your order delivered</CardDescription>
-              </div>
+            <CardHeader>
+              <CardTitle>
+                <MapPin className="mr-2 inline-block" /> Delivery Address
+              </CardTitle>
+              <CardDescription>Select your delivery address</CardDescription>
             </CardHeader>
             <CardContent>
-              <RadioGroup value={String(selectedAddress)} onValueChange={(value) => setSelectedAddress(Number(value))}>
+              <RadioGroup
+                value={selectedAddress.toString()}
+                onValueChange={(val) => setSelectedAddress(parseInt(val))}
+                className="space-y-4"
+              >
                 {savedAddresses.map((address) => (
-                  <div key={address.id} className="flex items-start space-x-2 mb-4">
-                    <RadioGroupItem value={String(address.id)} id={`address-${address.id}`} className="mt-1" />
-                    <div className="grid gap-1.5">
-                      <Label htmlFor={`address-${address.id}`} className="font-medium">
-                        {address.name}
-                      </Label>
+                  <div key={address.id} className="flex items-start space-x-4">
+                    <RadioGroupItem value={address.id.toString()} id={`address-${address.id}`} />
+                    <Label htmlFor={`address-${address.id}`} className="cursor-pointer w-full">
+                      <div className="font-medium">{address.name}</div>
                       <div className="text-sm text-gray-500">
-                        <p>{address.address}</p>
-                        <p>
-                          {address.city}, {address.state} - {address.pincode}
-                        </p>
-                        <p>Phone: {address.phone}</p>
+                        {address.address}, {address.city}, {address.state} - {address.pincode}<br />
+                        Phone: {address.phone}
                       </div>
-                    </div>
+                    </Label>
                   </div>
                 ))}
               </RadioGroup>
-              <Button variant="outline" className="mt-2">
-                Add New Address
-              </Button>
             </CardContent>
           </Card>
 
-          {/* Delivery Options */}
           <Card>
-            <CardHeader className="flex flex-row items-center">
-              <div className="mr-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
-                <Truck className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Delivery Options</CardTitle>
-                <CardDescription>Choose your preferred delivery method</CardDescription>
-              </div>
+            <CardHeader>
+              <CardTitle>
+                <Truck className="mr-2 inline-block" /> Delivery Options
+              </CardTitle>
+              <CardDescription>Choose your delivery preference</CardDescription>
             </CardHeader>
             <CardContent>
-              <RadioGroup defaultValue="standard">
-                <div className="flex items-start space-x-2 mb-4">
-                  <RadioGroupItem value="standard" id="delivery-standard" className="mt-1" />
-                  <div className="grid gap-1.5 flex-1">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="delivery-standard" className="font-medium">
-                        Standard Delivery
-                      </Label>
-                      <span className="font-medium">₹40</span>
-                    </div>
-                    <p className="text-sm text-gray-500">Delivery within 30-45 minutes</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <RadioGroupItem value="express" id="delivery-express" className="mt-1" />
-                  <div className="grid gap-1.5 flex-1">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="delivery-express" className="font-medium">
-                        Express Delivery
-                      </Label>
-                      <span className="font-medium">₹80</span>
-                    </div>
-                    <p className="text-sm text-gray-500">Delivery within 15-20 minutes</p>
-                  </div>
-                </div>
-              </RadioGroup>
-            </CardContent>
-          </Card>
-
-          {/* Payment Method */}
-          <Card>
-            <CardHeader className="flex flex-row items-center">
-              <div className="mr-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
-                <CreditCard className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Payment Method</CardTitle>
-                <CardDescription>Select your preferred payment method</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={paymentMethod} onValueChange={setPaymentMethod}>
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="card">Card</TabsTrigger>
-                  <TabsTrigger value="upi">UPI</TabsTrigger>
-                 
-                  <TabsTrigger value="cod">Cash</TabsTrigger>
+              <Tabs defaultValue="standard" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="standard">Standard</TabsTrigger>
+                  <TabsTrigger value="express">Express</TabsTrigger>
                 </TabsList>
-                <TabsContent value="card" className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="card-number">Card Number</Label>
-                    <Input id="card-number" placeholder="1234 5678 9012 3456" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry">Expiry Date</Label>
-                      <Input id="expiry" placeholder="MM/YY" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cvv">CVV</Label>
-                      <Input id="cvv" placeholder="123" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="name-on-card">Name on Card</Label>
-                    <Input id="name-on-card" placeholder="Debehaa" />
-                  </div>
+                <TabsContent value="standard">
+                  <p className="mt-2 text-gray-600">Delivered within 3-5 business days.</p>
                 </TabsContent>
-                <TabsContent value="upi" className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="upi-id">UPI ID</Label>
-                    <Input id="upi-id" placeholder="yourname@upi" />
-                  </div>
-                </TabsContent>
-                <TabsContent value="wallet" className="space-y-4 pt-4">
-                  <RadioGroup defaultValue="paytm">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="paytm" id="wallet-paytm" />
-                      <Label htmlFor="wallet-paytm">Paytm</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="phonepe" id="wallet-phonepe" />
-                      <Label htmlFor="wallet-phonepe">PhonePe</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="amazonpay" id="wallet-amazonpay" />
-                      <Label htmlFor="wallet-amazonpay">Amazon Pay</Label>
-                    </div>
-                  </RadioGroup>
-                </TabsContent>
-                <TabsContent value="cod" className="pt-4">
-                  <p className="text-sm text-gray-500">You will pay ₹{total} in cash when your order is delivered.</p>
+                <TabsContent value="express">
+                  <p className="mt-2 text-gray-600">Delivered within 1-2 business days. Additional charges may apply.</p>
                 </TabsContent>
               </Tabs>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <CreditCard className="mr-2 inline-block" /> Payment Method
+              </CardTitle>
+              <CardDescription>Select your payment option</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={paymentMethod}
+                onValueChange={setPaymentMethod}
+                className="space-y-4"
+              >
+                <div className="flex items-center space-x-4">
+                  <RadioGroupItem value="card" id="card" />
+                  <Label htmlFor="card">Credit / Debit Card</Label>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <RadioGroupItem value="cod" id="cod" />
+                  <Label htmlFor="cod">Cash on Delivery</Label>
+                </div>
+              </RadioGroup>
             </CardContent>
           </Card>
         </div>
