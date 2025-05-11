@@ -201,10 +201,10 @@ export default function CheckoutPage() {
                   <TabsTrigger value="express">Express</TabsTrigger>
                 </TabsList>
                 <TabsContent value="standard">
-                  <p className="mt-2 text-gray-600">Delivered within 3-5 business days.</p>
+                  <p className="mt-2 text-gray-600">Delivered within 40-60 minutes</p>
                 </TabsContent>
                 <TabsContent value="express">
-                  <p className="mt-2 text-gray-600">Delivered within 1-2 business days. Additional charges may apply.</p>
+                  <p className="mt-2 text-gray-600">Delivered within 20-30 minuutes. Additional charges may apply.</p>
                 </TabsContent>
               </Tabs>
             </CardContent>
